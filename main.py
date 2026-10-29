@@ -7,28 +7,34 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-# Forzar que el directorio de la API esté en el PATH para evitar errores de importación en producción
 directorio_actual = os.path.dirname(os.path.abspath(__file__))
 if directorio_actual not in sys.path:
     sys.path.insert(0, directorio_actual)
 
 app = FastAPI(
     title="API Olist - Riesgo de Mala Reseña",
-    description="Servicio web para predecir la probabilidad de recibir 1 o 2 estrellas en un pedido entregado."
+    description="Servicio web para predecir la probabilidad de recibir 1 o 2 estrellas."
 )
 
-# Cargar el modelo guardado y el umbral del Top 10%
-ruta_modelo = os.path.join(directorio_actual, "modelo_riesgo.joblib")
-ruta_umbral = os.path.join(directorio_actual, "umbral.json")
+# Carga diferida (lazy loading) para que la API responda inmediatamente a Render en el arranque
+modelo = None
+UMBRAL = 0.2591
 
-modelo = joblib.load(ruta_modelo)
-
-try:
-    with open(ruta_umbral, "r") as f:
-        datos_umbral = json.load(f)
-        UMBRAL = float(datos_umbral.get("umbral", 0.2609))
-except Exception:
-    UMBRAL = 0.2609
+def cargar_recursos():
+    global modelo, UMBRAL
+    if modelo is None:
+        try:
+            ruta_modelo = os.path.join(directorio_actual, "modelo_riesgo.joblib")
+            modelo = joblib.load(ruta_modelo)
+            
+            ruta_umbral = os.path.join(directorio_actual, "umbral.json")
+            if os.path.exists(ruta_umbral):
+                with open(ruta_umbral, "r") as f:
+                    datos_umbral = json.load(f)
+                    UMBRAL = float(datos_umbral.get("umbral", 0.2591))
+        except Exception as e:
+            print(f"Error al cargar recursos: {str(e)}")
+            raise RuntimeError(f"No se pudo cargar el modelo en el servidor: {str(e)}")
 
 class PedidoContrato(BaseModel):
     order_id: str
@@ -51,11 +57,13 @@ class PedidoContrato(BaseModel):
 
 @app.get("/")
 def home():
-    return {"status": "ok", "mensaje": "API de Riesgo Olist activa y lista."}
+    # Render verifica este endpoint para validar el Port Binding. Debe responder ultra rápido.
+    return {"status": "ok", "mensaje": "API activa. El modelo se inicializará en la primera llamada de predicción."}
 
 @app.post("/riesgo")
 def predecir_riesgo(pedido: PedidoContrato):
     try:
+        cargar_recursos()
         df_pedido = pd.DataFrame([pedido.model_dump()])
         probabilidad = float(modelo.predict_proba(df_pedido)[:, 1])
         riesgo_alto = bool(probabilidad >= UMBRAL)
