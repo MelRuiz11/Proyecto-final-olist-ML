@@ -58,7 +58,7 @@ def predecir_riesgo(pedido: PedidoContrato):
     try:
         df_pedido = pd.DataFrame([pedido.model_dump()])
         probabilidad = float(modelo.predict_proba(df_pedido)[:, 1])
-        riesgo_alto = bool(probabilidad >= UBRAL)
+        riesgo_alto = bool(probabilidad >= UMBRAL)
 
         return {
             "order_id": pedido.order_id,
