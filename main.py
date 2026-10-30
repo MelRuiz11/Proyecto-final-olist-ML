@@ -26,7 +26,7 @@ def cargar_recursos():
         try:
             ruta_modelo = os.path.join(directorio_actual, "modelo_riesgo.joblib")
             modelo = joblib.load(ruta_modelo)
-            
+
             ruta_umbral = os.path.join(directorio_actual, "umbral.json")
             if os.path.exists(ruta_umbral):
                 with open(ruta_umbral, "r") as f:
